@@ -1,10 +1,4 @@
-/*  Written by Tim Schreiber
-    StackOverflow user 'sakir' is incorrectly claiming that they wrote this code in the following answer: 
-        http://stackoverflow.com/questions/31298235/dapper-and-unit-of-work-pattern/31636037
-    
-    They have never in any way contributed to this code, and the false attribution has been reported to StackOverflow. */
-
-using DapperUnitOfWork.Repositories;
+  
 using System;
 using System.Data;
 using System.Data.SqlClient;
@@ -15,27 +9,36 @@ namespace DapperUnitOfWork
     {
         private IDbConnection _connection;
         private IDbTransaction _transaction;
-        private IBreedRepository _breedRepository;
-        private ICatRepository _catRepository;
         private bool _disposed;
 
-        public UnitOfWork(string connectionString)
+        /// <summary>
+        /// Gets current instance of the NhUnitOfWork.
+        /// It gets the right instance that is related to current thread.
+        /// </summary>
+        public static UnitOfWork Current
         {
-            _connection = new SqlConnection(connectionString);
+            get { return _current; }
+            set { _current = value; }
+        }
+        [ThreadStatic]
+        private static UnitOfWork _current;
+        public UnitOfWork()
+        {
+            _connection = new SqlConnection();
             _connection.Open();
+        }
+
+        /// <summary>
+        /// Opens database connection and begins transaction.
+        /// </summary>
+        public void BeginTransaction()
+        {
             _transaction = _connection.BeginTransaction();
         }
 
-        public IBreedRepository BreedRepository
-        {
-            get { return _breedRepository ?? (_breedRepository = new BreedRepository(_transaction)); }
-        }
-
-        public ICatRepository CatRepository
-        {
-            get { return _catRepository ?? (_catRepository = new CatRepository(_transaction)); }
-        }
-
+        /// <summary>
+        /// Commits transaction and closes database connection.
+        /// </summary>
         public void Commit()
         {
             try
@@ -50,15 +53,29 @@ namespace DapperUnitOfWork
             finally
             {
                 _transaction.Dispose();
-                _transaction = _connection.BeginTransaction();
-                resetRepositories();
+                _connection.Close();
             }
         }
 
-        private void resetRepositories()
+        /// <summary>
+        /// Rollbacks transaction and closes database connection.
+        /// </summary>
+        public void Rollback()
         {
-            _breedRepository = null;
-            _catRepository = null;
+            try
+            {
+                _transaction.Rollback();
+            }
+            catch
+            {
+                _transaction.Rollback();
+                throw;
+            }
+            finally
+            {
+                _transaction.Dispose();
+                _connection.Close();
+            }
         }
 
         public void Dispose()
